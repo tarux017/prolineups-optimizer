@@ -91,10 +91,10 @@
 
         try {
             // STEP 1: Sync Data
-            await fetch('http://127.0.0.1:8000/api/v1/sync', { method: 'POST' });
+            await fetch('https://prolineups-optimizer-1.onrender.com/api/v1/sync', { method: 'POST' });
 
             // STEP 2: Fetch Optimization
-            const response = await fetch('http://127.0.0.1:8000/api/v1/optimize');
+            const response = await fetch('https://prolineups-optimizer-1.onrender.com/api/v1/optimize');
             const data = await response.json();
 
             // STEP 3: Render the UI
