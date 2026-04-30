@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProLineup | Fantasy Optimizer</title>
+    <style>
+        :root { --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --accent: #10b981; --accent-hover: #059669; --border: #334155; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 40px 20px; }
+        .dashboard { max-width: 900px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 1px solid var(--border); padding-bottom: 20px; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -0.5px; }
+        .badge { background: rgba(16, 185, 129, 0.1); color: var(--accent); padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid rgba(16, 185, 129, 0.2); }
+        
+        .action-panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }
+        .action-text h3 { margin: 0 0 5px 0; font-size: 18px; }
+        .action-text p { margin: 0; color: #94a3b8; font-size: 14px; }
+        button { background-color: var(--accent); color: white; border: none; border-radius: 8px; padding: 12px 24px; font-size: 15px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+        button:hover { background-color: var(--accent-hover); transform: translateY(-1px); }
+        button:disabled { background-color: #475569; cursor: not-allowed; transform: none; }
+
+        .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; display: none; }
+        .metric-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; }
+        .metric-card span { display: block; color: #94a3b8; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+        .metric-card strong { font-size: 32px; font-weight: 700; color: var(--accent); }
+
+        .roster-table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; border: 1px solid var(--border); display: none; }
+        .roster-table th, .roster-table td { padding: 16px 20px; text-align: left; border-bottom: 1px solid var(--border); }
+        .roster-table th { background: #0f172a; color: #94a3b8; font-size: 12px; text-transform: uppercase; font-weight: 600; letter-spacing: 1px; }
+        .roster-table tr:last-child td { border-bottom: none; }
+        .role-tag { font-size: 11px; padding: 4px 10px; border-radius: 6px; background: #334155; font-weight: 600; }
+        
+        .loader { display: none; text-align: center; padding: 40px; color: #94a3b8; }
+    </style>
+</head>
+<body>
+
+<div class="dashboard">
+    <div class="header">
+        <h1>⚡ ProLineup Engine</h1>
+        <div class="badge">Model: PuLP Linear Optimizer</div>
+    </div>
+
+    <div class="action-panel">
+        <div class="action-text">
+            <h3>Matchup: RR vs DC (Live API Sync)</h3>
+            <p>Pool Size: Auto-Synced • Constraints Active: Role Limits, 100Cr Cap, Max 7 Per Team</p>
+        </div>
+        <button id="optimizeBtn" onclick="generateLineup()">Initialize Algorithm</button>
+    </div>
+
+    <div id="loader" class="loader">Computing permutations...</div>
+
+    <div class="metrics-grid" id="metricsGrid">
+        <div class="metric-card">
+            <span>Projected Max Points</span>
+            <strong id="totalPoints">0</strong>
+        </div>
+        <div class="metric-card">
+            <span>Total Salary Used</span>
+            <strong id="totalCredits">0/100</strong>
+        </div>
+    </div>
+
+    <table class="roster-table" id="rosterTable">
+        <thead>
+            <tr>
+                <th>Player</th>
+                <th>Team</th>
+                <th>Role</th>
+                <th>Salary</th>
+            </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+    </table>
+</div>
+
+<script>
+    async function generateLineup() {
+        const btn = document.getElementById('optimizeBtn');
+        const loader = document.getElementById('loader');
+        const metrics = document.getElementById('metricsGrid');
+        const table = document.getElementById('rosterTable');
+        const tbody = document.getElementById('resultsBody');
+        
+        btn.innerText = "Syncing Data & Running Model...";
+        btn.disabled = true;
+        metrics.style.display = 'none';
+        table.style.display = 'none';
+        loader.style.display = 'block';
+
+        try {
+            // STEP 1: Sync Data
+            await fetch('http://127.0.0.1:8000/api/v1/sync', { method: 'POST' });
+
+            // STEP 2: Fetch Optimization
+            const response = await fetch('http://127.0.0.1:8000/api/v1/optimize');
+            const data = await response.json();
+
+            // STEP 3: Render the UI
+            setTimeout(() => {
+                loader.style.display = 'none';
+                if (data.status === 'success') {
+                    // Fix for "undefined" in Screenshot (411).png
+                    document.getElementById('totalPoints').innerText = data.total_projected_points;
+                    document.getElementById('totalCredits').innerText = `${data.total_credits_used} / 100`;
+                    
+                    // Sort by role for clean display
+                    const roleOrder = { "WK": 1, "BAT": 2, "AR": 3, "BOWL": 4 };
+                    data.lineup.sort((a, b) => roleOrder[a.role] - roleOrder[b.role]);
+
+                    tbody.innerHTML = data.lineup.map(p => {
+                        // Highlighting Captain and Vice-Captain
+                        let badge = "";
+                        if (p.name === data.captain) {
+                            badge = `<span class="role-tag" style="background:#f59e0b; color:white; margin-left:5px;">C</span>`;
+                        } else if (p.name === data.vice_captain) {
+                            badge = `<span class="role-tag" style="background:#6366f1; color:white; margin-left:5px;">VC</span>`;
+                        }
+
+                        return `
+                            <tr>
+                                <td style="font-weight: 500;">${p.name} ${badge} <span style="font-size: 10px; color: #10b981; margin-left: 5px;">Proj: ${p.points}</span></td>
+                                <td style="color: #94a3b8;">${p.team}</td>
+                                <td><span class="role-tag">${p.role}</span></td>
+                                <td>${p.credits} cr</td>
+                            </tr>
+                        `;
+                    }).join('');
+                    
+                    metrics.style.display = 'grid';
+                    table.style.display = 'table';
+                } else {
+                    alert(data.message || "Optimization failed.");
+                }
+                btn.innerText = "Re-Run Optimization";
+                btn.disabled = false;
+            }, 800);
+
+        } catch (error) {
+            console.error(error);
+            alert("Backend connection failed. Make sure your FastAPI server is running.");
+            loader.style.display = 'none';
+            btn.innerText = "Initialize Algorithm";
+            btn.disabled = false;
+        }
+    }
+</script>
+</body>
+</html>
